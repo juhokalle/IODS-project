@@ -1,13 +1,4 @@
 
 # About the project
 
-*Write a short description about the course and add a link to your GitHub repository here. This is an R Markdown (.Rmd) file so you should use R Markdown syntax.*
-
-```{r}
-# This is a so-called "R chunk" where you can write R code.
-
-date()
-
-```
-The text continues here. This is test
-
+This is the course diary for the course Introduction to Data Science, organized by University of Helsinki in Fall 2022. Here I will update my progress on the course, as well as the actual course work during the next six weeks. I heard about the course through a mailing list and it caught my attention as it is could support my research. I do empirical research in macroeconomics and therefore I deal with large data sets on a daily basis.  This is why it is useful for me to learn new routines and ideas on data management.
