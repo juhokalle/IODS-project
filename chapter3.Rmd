@@ -1,1 +1,85 @@
 # Chapter 3
+
+```{r preliminaries, message=FALSE}
+library(tidyverse)
+alc <- read_csv("data/alc.csv")
+```
+
+## Q2
+The data set consists of 35 variables of 370 students in secondary education of two Portugese schools. This survey data were gathered in 2014. The data are discrete and consist of `r sum(apply(alc, 2, function(x) length(unique(x)))==2)` binary and `r sum(apply(alc, 2, function(x) length(unique(x)))!=2)` non-binary covariates describing student backgrounds. Examples of the former are access to internet or to family educational support and, of the latter, time used for travelling to school or for weekly studies. The number of unique values per variable as well as the variable names are given in the graph below. We see that there is considerable variation in the non-binary variables, with the minimum and maximum number of unique values in this group being 3 and 26, respectively.
+
+```{r}
+tibble(n_uniq = apply(alc, 2, function(x) length(unique(x))),
+       var_name = names(n_uniq)) %>% 
+  ggplot(aes(x = n_uniq, y=var_name)) + 
+  geom_point() +
+  scale_y_discrete(limits=rev) +
+  scale_x_continuous(breaks=seq(5,25, by=5)) +
+  xlab("Number of unique values per variable") +
+  ylab("Variable names")
+```
+
+## Q3
+I choose two variables from both groups of binary and non-binary variables. Chosen variables from the former group are parents' cohabitation status and access to extra educational support, while, of the latter group, I choose the number of past failures and home to school travel time. I expect that the parents' living apart and no access to extra educational support are positively correlated with higher alcohol use. Finally, I expect that the number of past failures and home to school travel time are positively correlated with the alcohol use.
+
+## Q4
+To explore the relationship between alcohol use and the chosen covariates, I use two different graphical tools. In the first one, I set the binary variables in the x-axis and the shares of each group denoting the alcohol use on a scale 1 to 5 stacked in the y-axis. This facilitates an easy comparison between the groups even though the numbers of cases between the binary variables vary. We would expect that the bars on the left have larger share of small values than those in the right. 
+
+We see that the postulated hypothesis on the relationship between the binary variables and alcohol use might not be as strong as expected. In the both cases, the proportion of the respondents having alcohol use below level 2 is almost the same. Moreover, the proportion of respondents having the highest level of alcohol use (5) is considerably higher with respondents with access to educational support, which is surprising. In summary, the relationship between these binary variables and alcohol use is very weak.
+
+```{r}
+alc <- alc %>%
+  mutate(Pstatus = map_chr(.x = Pstatus, ~ifelse(.x=="A", "Apart", "Together"))) 
+alc %>% 
+  ggplot(aes(fill = factor(alc_use, levels = as.character(seq(5, 1, by = -0.5))),  
+             y = alc_use, 
+             x = factor(Pstatus, levels = c("Together", "Apart")))) + 
+  geom_bar(position="fill", stat="identity") + 
+  ylab("Alcohol use by proportion conditioned on the group") +
+  xlab("Parents' cohabitation status ") +
+  scale_fill_discrete(guide="none") -> p1
+
+alc <- alc %>%
+  mutate(schoolsup = map_chr(.x = schoolsup, ~ifelse(.x=="yes", "Yes", "No"))) 
+alc %>%
+  ggplot(aes(fill = factor(alc_use, levels = as.character(seq(5, 1, by = -0.5))), 
+             y = alc_use, 
+             x = factor(schoolsup, levels = c("Yes", "No")))) + 
+  geom_bar(position="fill", stat="identity") + 
+  ylab("") +
+  xlab("Access to educational support") +
+  scale_fill_discrete("Alcohol use") -> p2
+gridExtra::marrangeGrob(list(p1,p2), nrow = 1, ncol = 2, top = NULL)
+```
+
+Second, I use the box plots to describe the relationship between alcohol use (y-axis) and the non-binary covariates (x-axis), which both are given conveniently four distinct values. Here we see a considerably stronger relationship between alcohol use and the chosen covariates. The median values (denoted by the vertical line in the bar) increase with the travel time to school and past failures. Also, we see that the 25th percentile of the groups, which have the highest values for both travel time to school and past failures, are above the 75th percentiles of the groups with the smallest values in these categories. These indicate stronger relationship between alcohol use and the chosen covariates.
+
+```{r}
+alc %>% ggplot(aes(x = traveltime, y=alc_use, group=traveltime)) + 
+  geom_boxplot() +
+  ylab("Alcohol use (1-5)") +
+  xlab("Travel time to school (1-4)") -> p1
+alc %>% 
+  ggplot(aes(x = failures, y=alc_use, group = failures)) + 
+  geom_boxplot() + 
+  ylab("") +
+  xlab("Past failures (0-3)") -> p2
+gridExtra::marrangeGrob(list(p1,p2), nrow = 1, ncol = 2, top = NULL)
+```
+
+## Q5
+
+The logistic regression results are given below. Two remarks are in order. First, the results confirm the earlier intuition that there is no strong linear relationship between the binary variables and alcohol use. The coefficients of the regression are not different from zero at the conventional significance levels. Second, the graphical intution of the non-binary variables is confirmed and the alcohol use appears to be linearly dependent on the non-binary covariates. Both of the coefficients pertaining to the non-binary variables are different from zero at the 5 percent significance level, as shown in the column for p-values. 
+
+```{r}
+glm_obj <- glm(high_use ~ Pstatus + schoolsup + traveltime + failures, data = alc, family = "binomial")
+glm_obj %>% broom::tidy() %>% mutate_if(is.numeric, round, 4) %>% DT::datatable()
+```
+
+Next, below are the odds ratios calculated from the previous regression model. The odds ratios of the non-binary variables are above one and do not contain one in their 95 percent confidence intervals, and this confirms that the association between alcohol use and the non-binary variables. In summary, there is higher relative risk in using high amounts of alcohol with longer distance to school and past fails compared to those with shorter distance to school and fewer past failures, keeping the other variables fixed.
+```{r message=FALSE}
+OR <- coef(glm_obj) %>% exp
+CI <- confint(glm_obj) %>% exp()
+cbind(OR, CI) %>% round(4) %>% DT::datatable()
+```
+
