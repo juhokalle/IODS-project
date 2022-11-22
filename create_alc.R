@@ -7,10 +7,12 @@
 library(readr)
 library(tidyverse)
 # Q3
+# read data
 student_por <- read_delim("data/student-por.csv", 
                           delim = ";", escape_double = FALSE, trim_ws = TRUE)
 student_mat <- read_delim("data/student-mat.csv", 
                           delim = ";", escape_double = FALSE, trim_ws = TRUE)
+# get dims and structure
 lapply(list(student_por, student_mat), dim)
 lapply(list(student_por, student_mat), str)
 # Q4
@@ -18,9 +20,11 @@ free_cols <- c("failures", "paid", "absences", "G1", "G2", "G3")
 join_cols <- setdiff(colnames(student_por), free_cols)
 student_joined <- inner_join(student_por, student_mat, by = join_cols, suffix = c(".por", ".mat")) 
 alc <- student_joined %>% dplyr::select(all_of(join_cols))
+# get dims and structure of the data
 dim(alc)
 str(alc)
 # Q5
+# get rid of duplicates
 for(col_name in free_cols) {
   
   two_cols <- student_joined %>% dplyr::select(starts_with(col_name))
@@ -33,9 +37,11 @@ for(col_name in free_cols) {
   }
 }
 # Q6
+# calculate means and binary variable on alcohol use
 alc <- alc %>% 
   mutate(alc_use = map2_dbl(.x = Walc, .y = Dalc, ~mean(c(.x, .y)))) %>% 
   mutate(high_use = map_lgl(.x = alc_use, ~.x>2))
 # Q7
+# check and save data
 glimpse(alc)
 write_csv(alc, "data/alc.csv")
