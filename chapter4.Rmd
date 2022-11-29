@@ -1,0 +1,88 @@
+# Chapter 4
+
+```{r message=FALSE, warning=FALSE}
+library(MASS)
+library(corrplot)
+library(tidyverse)
+library(ggplot2)
+set.seed(123) # for training data sample
+data(Boston)
+lda.arrows <- function(x, myscale = 1, arrow_heads = 0.1, color = "red", tex = 0.75, choices = c(1,2)){
+  heads <- coef(x)
+  arrows(x0 = 0, y0 = 0, 
+         x1 = myscale * heads[,choices[1]], 
+         y1 = myscale * heads[,choices[2]], col=color, length = arrow_heads)
+  text(myscale * heads[,choices], labels = row.names(heads), 
+       cex = tex, col=color, pos=3)
+}
+```
+
+## Q2
+The data set under analysis consists of `r dim(Boston)[1]` observations from `r dim(Boston)[2]` variables relating to housing in Boston. The data are numerical with with one dummy variable. The data are informative about the housing values in suburbs of Boston, and details many background factors useful for someone potentially wanting to buy a house from Boston. The number of unique values per variable are given in the figure below. We see that the number of unique values vary from `r apply(Boston, 2, function(x) length(unique(x))) %>% min` to `r apply(Boston, 2, function(x) length(unique(x))) %>% max` with the former denoting the dummy variable **chas**.
+
+```{r}
+tibble(n_uniq = apply(Boston, 2, function(x) length(unique(x))),
+       var_name = names(n_uniq)) %>% 
+  ggplot(aes(x = n_uniq, y=var_name)) + 
+  geom_point() +
+  scale_y_discrete(limits=rev) +
+  #scale_x_continuous(breaks=seq(5,25, by=5)) +
+  xlab("Number of unique values per variable") +
+  ylab("Variable names")
+```
+
+## Q3
+```{r}
+smr_tbl <- apply(Boston, 2, summary)
+cor_mt <- cor(Boston)
+```
+
+The summaries and associated box plots of the variables are given below. The data are strongly of different scale as exemplified by the range of the mean values `r min(smr_tbl["Mean", ]) %>% round(2)`--`r max(smr_tbl["Mean", ])  %>% round(2)` and median values `r min(smr_tbl["Median", ])  %>% round(2)`--`r max(smr_tbl["Median", ])  %>% round(2)`. The variables **crim**, **zn**, and **black** are strongly skewed, former two to right, and the latter to left, as shown by the box plot and the comparison between the respective means and medians. Apart from these three variables, the rest appear to be centered around their means. The variable **dis** appears to exhibit strongest correlation with the other variables, with strong negative relationship between this and variables **indus**, **nox** and **age**.
+
+```{r}
+DT::datatable(apply(smr_tbl, 2, round, digits = 2))
+boxplot(as.matrix(Boston), cex.axis=0.65)
+corrplot(cor_mt, method="circle")
+```
+
+## Q4
+
+```{r}
+data_std <- as_tibble(Boston) %>% 
+  mutate(across(!chas, ~(.x-mean(.x))/sd(.x)))
+smr_tbl <- apply(data_std, 2, summary)
+cor_mt <- cor(data_std)
+```
+
+The standardised data (apart from dummy variable **chas**) are shown below. The standardisation does not remove any outliers but renders the variables to same scale. This helps detecting further properties of the data from with the boxplot, such as **rm** having fatter tails in comparison to other variables. For the same skewed variables as mentioned before, one could entertain a logarithmic transformation to remove the strongly skewed nature of certain variables.
+
+```{r}
+DT::datatable(apply(smr_tbl, 2, round, digits = 2))
+boxplot(as.matrix(data_std), cex.axis = 0.65)
+```
+
+```{r}
+data_std <- data_std %>% 
+  mutate(crime = cut(data_std$crim, breaks =  quantile(data_std$crim), include.lowest = TRUE)) %>% 
+  dplyr::select(-crim) %>% 
+  mutate(train = (1:n())%in%sample(x = 1:n(), size = n()*0.8))
+levels(data_std$crime) <-  c("low", "med_low", "med_high", "high")
+```
+
+## Q5
+
+```{r}
+lda_obj <- lda(data_std$crime[data_std$train] ~ ., data = data_std %>% dplyr::select(-crime) %>% filter(train))
+plot(lda_obj, dimen = 2)
+lda.arrows(lda_obj, myscale = 1)
+```
+
+## Q6
+The predictions from the LDA model are given below. We see that the classes **low** and **high** are predicted accurately from the predictors. On the other hand, classes **med_low** and **med_high** are quite poorly predicted by the model. Especially, class **med_low** is predicted in less than half of the cases correctly.
+
+```{r}
+lda.pred <- predict(lda_obj, newdata = data_std %>% dplyr::select(-crime) %>% filter(!train))
+
+# cross tabulate the results
+table(correct = data_std$crime[!data_std$train], predicted = lda.pred$class)
+```
