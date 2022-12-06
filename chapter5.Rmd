@@ -13,7 +13,7 @@ human <- read_csv("data/human.csv", show_col_types = FALSE)
 smr_tbl <- apply(human %>% dplyr::select(-Country), 2, summary)
 cor_mat <- cor(human %>% dplyr::select(-Country) %>% as.matrix)
 ```
-The variables are summarized below in figures giving the individual values per variable, summaries per variable, and correlation matrix between the variables. First, we see that the variable vary by order of magnitudes as *gross national income* takes values up to `r max(human$GNI) %>% round(0)`, while the *the ratio of Female and Male populations with secondary education* has the smallest value at `r min(human$Edu2_FM) %>% round(2)`. The bar plot shows also that the *Adolescent birth rate* , *GNI* and *Maternal mortality ratio* are skewed to the right as they are more "sparse", i.e. have many observations, which are above the mean. This can be confirmed from the summary table. Finally and not surprisingly, we see clearly that the *Maternal mortality ratio* and *Adolescent birth rate* vary negatively with variables associated with good quality of life, such as income, life expectancy and expected years of schooling.
+The variables are summarized below in figures giving the individual values per variable, summaries per variable, and correlation matrix between the variables. First, we see that the variable vary by order of magnitudes as *gross national income* takes values up to `r max(human$GNI)`, while the *the ratio of Female and Male populations with secondary education* has the smallest value at `r min(human$Edu2_FM) %>% round(2)`. The bar plot shows also that the *Adolescent birth rate* , *GNI* and *Maternal mortality ratio* are skewed to the right as they are more "sparse", i.e. have many observations, which are above the mean. This can be confirmed from the summary table. Finally and not surprisingly, we see clearly that the *Maternal mortality ratio* and *Adolescent birth rate* vary negatively with variables associated with good quality of life, such as income, life expectancy and expected years of schooling.
 
 ```{r}
 human %>%
@@ -75,14 +75,21 @@ pca_human %>% biplot(choices = 1:2)
 
 ## Q4
 
-The two PCs accounting for the majority of the variation in the data can be classified easily into two groups. The first relates to the general development of the country. They summarize the variation in variables relating to maternal mortality, life expectancy, income, and education level. The second PC relates to two highly interlinked variables, i.e. adolescent birth rate and maternal mortality ratio. The link between the two is expected to be strongly positive, which is also shown in the earlier correlation plot.
+The two PCs accounting for the majority of the variation in the data can be classified easily into two groups. The first relates to the general development of the country. They summarize the variation in variables relating to maternal mortality, life expectancy, income, and education level. The second PC relates to two highly interlinked variables, i.e. adolescent birth rate and maternal mortality ratio. The link between the two is expected to be strongly positive, which is also shown in the earlier correlation plot. The two PCs point towards opposite directions, which confirms the negative relationship between the variables belonging to the two first PCs. The two remaining variables pointing north in the plot explain little variation in the data (as seen from the correlation plot too), and are separated from the rest of the variables.
 
 ## Q5
-
 ```{r message=FALSE, warning=FALSE}
 tea <- read.csv("https://raw.githubusercontent.com/KimmoVehkalahti/Helsinki-Open-Data-Science/master/datasets/tea.csv", stringsAsFactors = TRUE)
+cls <- tea %>% apply(2, class)
 # select 10 random columns
 tea_rd <- tea %>% dplyr::select(sample(1:ncol(tea), 10, replace = FALSE))
+tea_rd %>% str
+```
+In this data set, I pick randomly ten out of `r ncol(tea)` variables for the multiple correspondence analysis. The data are categorical and shown in figure below. The unique values per variable vary from two to six. Some the variables exhibit little variation, e.g. **dinner**, while variable **price** varies considerably more.
+
+
+```{r message=FALSE, warning=FALSE}
+
 # calculate the number of cases per factor for each variable
 get_counts <- apply(tea_rd, 2, table)
 plot_list <- list()
@@ -102,9 +109,10 @@ for(jj in 1:10){
 gridExtra::marrangeGrob(plot_list, nrow = 2, ncol = 5, top = FALSE)
 ```
 
+Below I conduct MCA and explore the results verbally and visually. The figure shows that the *principal inertia* is 10.5% for the first dimension and 9.5% for the second. Together, they account for 20% of the variation in the data. Therefore, it can be concluded that the variables are not strongly correlated with each other. This conclusion can be confirmed by looking at the MCA factor map. The factors of each variable are quite *randomly* located along the two dimensions. I would continue on exploring the data to find some more reasonable relationships between the variables.
+
 ```{r}
 mca <- FactoMineR::MCA(as.matrix(tea_rd), graph = FALSE)
 plot(mca, invisible="ind", graph.type = "classic", habillage = "quali")
-
 ```
 
