@@ -1,0 +1,110 @@
+# Chapter 5
+
+```{r message=FALSE, warning=FALSE}
+library(tidyverse)
+library(FactoMineR)
+library(corrplot)
+set.seed(123) # for sampling columns in Q5
+``` 
+
+## Q1
+```{r}
+human <- read_csv("data/human.csv", show_col_types = FALSE)
+smr_tbl <- apply(human %>% dplyr::select(-Country), 2, summary)
+cor_mat <- cor(human %>% dplyr::select(-Country) %>% as.matrix)
+```
+The variables are summarized below in figures giving the individual values per variable, summaries per variable, and correlation matrix between the variables. First, we see that the variable vary by order of magnitudes as *gross national income* takes values up to `r max(human$GNI) %>% round(0)`, while the *the ratio of Female and Male populations with secondary education* has the smallest value at `r min(human$Edu2_FM) %>% round(2)`. The bar plot shows also that the *Adolescent birth rate* , *GNI* and *Maternal mortality ratio* are skewed to the right as they are more "sparse", i.e. have many observations, which are above the mean. This can be confirmed from the summary table. Finally and not surprisingly, we see clearly that the *Maternal mortality ratio* and *Adolescent birth rate* vary negatively with variables associated with good quality of life, such as income, life expectancy and expected years of schooling.
+
+```{r}
+human %>%
+  # Switch to "long" format w. 'Country' as identifier
+  pivot_longer(-Country, names_to = "Variable", values_to = "Value") %>% 
+  ggplot(aes(x = Country, y = Value, width=1)) + 
+  # plot data on bar plot
+  geom_bar(stat='identity', fill = "forest green") + 
+  # 4x2 matrix of barplots
+  facet_wrap(~Variable, ncol = 4, nrow = 2, scales = "free_y") +
+  # remove the country names, they clutter the output
+  theme(axis.text.x = element_blank(),
+        axis.ticks.x = element_blank()) +
+  # Take out the labels
+  xlab("") +
+  ylab("")
+DT::datatable(apply(smr_tbl, 2, round, digits = 2))
+corrplot::corrplot(cor_mat, diag = FALSE, type='lower')
+```
+
+## Q2
+
+Below, I give two figures to visualize the PCA. The scree plot shows how much each principal component accounts for the total variance of the variables. We see that the first PC accounts for virtually all of the variance in the data. This can be confirmed from the biplot, in which only one arrow is visible, as the others would have length zero. This PC corresponds to the varible **GNI**, which is of two or three orders of magnitudes larger than the other variables. Therefore, the analysis using the non-standardized variables makes little sense here.  
+
+```{r warning=FALSE}
+pca_human <- prcomp(human %>% dplyr::select(-Country))
+var_explained <- pca_human$sdev^2 / sum(pca_human$sdev^2)
+qplot(x = 1:8, y = var_explained) + 
+  geom_line() + 
+  xlab("Principal Component") + 
+  ylab("Variance Explained") +
+  ggtitle("Scree Plot") +
+  ylim(0, 1)
+biplot(pca_human, choices = 1:2)
+```
+
+## Q3
+
+In the below figures I repeat the analysis of **Q2** but now with standardised data. Now we see that the first two PCs account for around 65% of the variance in the data, with the remaining six PCs accounting for the rest. Therefore, the data are quite well summarized using two PCs, as the line of the scree plot becomes quite flat after the second or third PC. This way of calculating the PCs is much more informative as we can give clearer interpretations to different PCs.
+
+```{r}
+pca_human <- human %>% 
+  # Select only numeric cols
+  dplyr::select(-Country) %>% 
+  # S'dize data
+  mutate_all( ~ (.x-mean(.x))/sd(.x)) %>% 
+  prcomp() 
+# calculate the variance explained per variable
+var_explained <- pca_human$sdev^2 / sum(pca_human$sdev^2)
+# them agains the number of PCs (8)
+qplot(1:8, var_explained) + 
+  geom_line() + 
+  xlab("Principal Component") + 
+  ylab("Variance Explained") +
+  ggtitle("Scree Plot") +
+  ylim(0, 1)
+pca_human %>% biplot(choices = 1:2)
+```
+
+## Q4
+
+The two PCs accounting for the majority of the variation in the data can be classified easily into two groups. The first relates to the general development of the country. They summarize the variation in variables relating to maternal mortality, life expectancy, income, and education level. The second PC relates to two highly interlinked variables, i.e. adolescent birth rate and maternal mortality ratio. The link between the two is expected to be strongly positive, which is also shown in the earlier correlation plot.
+
+## Q5
+
+```{r message=FALSE, warning=FALSE}
+tea <- read.csv("https://raw.githubusercontent.com/KimmoVehkalahti/Helsinki-Open-Data-Science/master/datasets/tea.csv", stringsAsFactors = TRUE)
+# select 10 random columns
+tea_rd <- tea %>% dplyr::select(sample(1:ncol(tea), 10, replace = FALSE))
+# calculate the number of cases per factor for each variable
+get_counts <- apply(tea_rd, 2, table)
+plot_list <- list()
+for(jj in 1:10){
+  # run a loop over the variables s.t. for each var a bar plot is created
+  plot_list[[jj]] <- tibble(count = get_counts[[jj]], char = names(get_counts[[jj]])) %>%
+    ggplot(aes(x=char, y = count)) +
+    geom_bar(stat='identity', fill = "forest green") +
+    xlab("") +
+    ylab("") +
+    ggtitle(names(get_counts)[jj]) +
+    theme(axis.text.x = element_text(angle = 45),
+          plot.title = element_text(size = 8))
+
+}
+# plot variables in a 2-by-5 matrix
+gridExtra::marrangeGrob(plot_list, nrow = 2, ncol = 5, top = FALSE)
+```
+
+```{r}
+mca <- FactoMineR::MCA(as.matrix(tea_rd), graph = FALSE)
+plot(mca, invisible="ind", graph.type = "classic", habillage = "quali")
+
+```
+
