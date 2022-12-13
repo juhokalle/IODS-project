@@ -1,0 +1,182 @@
+# Chapter 6
+
+```{r message=FALSE, warning=FALSE}
+library(tidyverse)
+library(lme4)
+BPRSL <- read_csv("data/BPRSL.csv", show_col_types = FALSE) %>% 
+  mutate(treatment = factor(treatment)) %>% 
+  mutate(subject = factor(subject)) 
+RATSL <- read_csv("data/RATSL.csv", show_col_types = FALSE) %>% 
+  mutate(ID = factor(ID)) %>% 
+  mutate(Group = factor(Group))
+```
+
+## Q1 
+In this exercise we analyze nutritional data on three groups of rats. The weight of the rats were observed over a time span of 64 days, and the weight was measured every seven days. The development of the weight over the sample span is depicted below. We see that the weights of the rats increase over time, as expected. The first group has the smallest development in weights in absolute terms. The interest is then if there is some differences in the means between the groups. This would indicate differences in the effectiveness of different diets.
+```{r}
+RATSL %>% 
+  ggplot(aes(x = Time, y = Weight, linetype = ID, color = ID)) +
+  geom_line() +
+  # fix line types across individuals
+  scale_linetype_manual(values = rep(1:length(unique(RATSL$ID)), 3)) +
+  # add color to better distinguish between individuals
+  scale_color_manual(values = rep(1:length(unique(RATSL$ID)), 3)) + 
+  # set plots apart across Group
+  facet_grid(. ~ Group, labeller = label_both) +
+  # remove legend
+  theme(legend.position = "none") + 
+  # set scale y-axis 
+  scale_y_continuous(limits = c(min(RATSL$Weight), max(RATSL$Weight)))
+```
+
+To analyze the question more carefully, the weights are standardized with respect to the measurement time and the resulting values are plotted below. This helps to see if the individuals with higher starting weight tend to have higher weight throughout the sample period. The development of the standardised weight appears approximately the same in nutrition group 1. In groups 2 and 3, there are more variation across the individuals, as is seen from the different slopes of the lines in these two panels.
+
+```{r}
+RATSL <- RATSL %>%
+  group_by(Time) %>%
+  mutate(stdwght = (Weight - mean(Weight))/sd(Weight)) %>%
+  ungroup()
+```
+
+```{r}
+RATSL %>% 
+  ggplot(aes(x = Time, y = stdwght, linetype = ID, color = ID)) +
+  geom_line() +
+  # fix line types across individuals
+  scale_linetype_manual(values = rep(1:length(unique(RATSL$ID)), 3)) +
+  # add color to better distinguish between individuals
+  scale_color_manual(values = rep(1:length(unique(RATSL$ID)), 3)) + 
+  # set plots apart across Group
+  facet_grid(. ~ Group, labeller = label_both) +
+  # remove legend
+  theme(legend.position = "none") + 
+  # set scale y-axis 
+  scale_y_continuous(name = "stadardized weight",
+                     limits = c(min(RATSL$stdwght), max(RATSL$stdwght)))
+```
+
+Next, we analyze the means of the groups. This makes the analysis easier as the objects of interest per time period is reduced to three. The interest is whether the means differ across the time periods. Two thins stand out. First, the mean of group 1 is substantially smaller from those of groups 2 and 3, and does not increase substantially across the sample span. Second, the means of groups 2 and 3 largely overlap. The slopes of the time series are positive and develop similarly. This would indicate that there is no substantial difference in the nutritional effect of these diets.
+
+```{r}
+RATSL %>%
+  group_by(Group, Time) %>%
+  # no need to use summarise() here if data is grouped
+  mutate(mean = mean(Weight),
+         se = sd(Weight)) %>% 
+  ungroup() %>% 
+  ggplot(aes(x = Time, y = mean, linetype = Group)) +
+  geom_line() +
+  geom_errorbar(aes(ymin=mean-se, ymax=mean+se, linetype="1"), width=0.3) +
+  scale_y_continuous(name = "mean(weight) +/- se(weight)")
+```
+
+Next, we analyse the question of equal means by box plots. The intuition of last figure is confirmed: group 1 has substantially smaller mean from the rest of the groups. Group two has an outlier value, which is removed from the analysis in the remainder.
+
+```{r}
+RATSL %>%
+  filter(Time > 1) %>%
+  group_by(Group, ID) %>%
+  mutate(mean=mean(Weight)) %>%
+  ungroup() %>% 
+  ggplot(aes(x = Group, y = mean)) +
+  geom_boxplot() +
+  stat_summary(fun = "mean", geom = "point", shape=23, size=4, fill = "white") +
+  scale_y_continuous(name = "mean(Weight), Days 8-64")
+```
+
+```{r}
+RATSL %>%
+  filter(Time > 1) %>%
+  group_by(Group, ID) %>%
+  mutate(mean=mean(Weight)) %>%
+  ungroup() %>% 
+  # filter out the possible outlier
+  filter(mean < max(mean)) %>% 
+  ggplot(aes(x = Group, y = mean)) +
+  geom_boxplot() +
+  stat_summary(fun = "mean", geom = "point", shape=23, size=4, fill = "white") +
+  scale_y_continuous(name = "mean(Weight), Days 8-64")
+```
+
+To test the hypothesis of equal means across the groups, we perform a simple t-test. The null hypothesis of equal means is rejected at the conventional significance levels (p-value <0.01). Therefore, the visual evidence was not supported by the formal hypothesis testing.
+
+```{r message=FALSE, warning=FALSE}
+anova_data <- RATSL %>%
+  filter(Time > 1) %>%
+  group_by(Group, ID) %>%
+  summarise(mean=mean(Weight)) %>%
+  ungroup() %>% 
+  # filter out the possible outlier
+  filter(mean < max(mean)) %>% 
+  filter(Group%in%c(2,3))
+
+t.test(mean ~ Group, data=anova_data,var.equal=TRUE)
+```
+
+Next, we assess the relationship between the mean weights and their development throughout the sample period using linear regression. The analysis below point towards the conclusion that the mean of the weights has increased across the individuals and time periods as the coefficient for **baseline** is positive and different from zero at the standard confidence levels. This is also backed by the anova-table, which lends support for the conclusion that the coefficients of the linear model are jointly different from zero at 99.9% level.
+
+```{r message=FALSE, warning=FALSE}
+ols_data <- RATSL %>%
+  filter(Time > 1) %>%
+  group_by(Group, ID) %>%
+  summarise(mean=mean(Weight)) %>%
+  ungroup() %>% 
+  #add baseline group
+  mutate(baseline = RATSL %>% filter(Time==1) %>% pull(Weight))
+
+fit <- lm(mean ~ Group + baseline, data = ols_data)
+summary(fit)
+anova(fit)
+```
+
+## Q2
+
+In this question we analyze data on males answering psychological questionnaire across eight weeks, based on which they were given scores (BPRS). They were given different treatments (coded in the data as treatment:1 or treatment:2). The results of individuals across the sample span is plotted below. The general trend is somewhat downwards. However, the individual differences across the ratings are large.   
+
+```{r}
+BPRSL %>% 
+  ggplot(aes(x=Week, y=BPRS, linetype=subject, color=subject)) +
+  geom_line() +
+  # fix line types across individuals
+  scale_linetype_manual(values = rep(1:length(unique(BPRSL$subject)), 2)) +
+  # add color to better distinguish between individuals
+  scale_color_manual(values = rep(1:length(unique(BPRSL$subject)), 2)) + 
+  # set plots apart across Group
+  facet_grid(. ~ treatment, labeller = label_both) +
+  # remove legend
+  theme(legend.position = "none")
+```
+
+The preliminary analysis on the effect of treatment and the BPRS scores involves a linear regression where the underlying assumption is that the individuals are independent across time. The preliminary results lend support that test scores are decreasing with time, while the differences between groups are non-significant.
+
+```{r}
+lm_obj <- lm(BPRS ~ treatment + Week, data = BPRSL)
+summary(lm_obj)
+```
+
+Next, we carry out the same analysis but with random intercept for each *subject*. The intercepts are highly variable, and not equal across *subjects* as seen from the results below.
+
+```{r}
+BPRS_ref <- lmer(BPRS ~ Week + treatment + (1 | subject), data = BPRSL, REML = FALSE)
+BPRS_ref %>% summary
+```
+
+Going forward, we analyse the model by including a random slope for the variable *Week*. This allows even more general interpretation of the predictions. It controls for the different score development profiles between the individual males. The random slope has a considerably smaller variance than that of the random intercept of the individuals. Looking at the differences between the model fit we see that the random slope model is preferred to only random intercept at the 95% confidence level, as seen by the likelihood ratio test (p-value $\approx$ 0.025).
+
+```{r}
+BPRS_ref1 <- lmer(BPRS ~ Week + treatment + (Week | subject), data = BPRSL, REML = FALSE)
+summary(BPRS_ref1)
+```
+
+```{r}
+anova(BPRS_ref, BPRS_ref1)
+```
+
+Finally, we explore if the inclusion of the interaction term capturing the combination of the week and treatment improve the fit. The improvement is modest. The LR test statistic is approx. 3.1 with 1 degrees of freedom yielding a p-value of about 0.075. Therefore, the simpler model is perhaps preferred in this instance.
+
+```{r}
+BPRS_ref2 <- lmer(BPRS ~ Week + treatment + Week*treatment + (Week | subject), data = BPRSL, REML = FALSE)
+summary(BPRS_ref2)
+anova(BPRS_ref2, BPRS_ref1)
+```
+
